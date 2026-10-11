@@ -94,15 +94,20 @@ def search(query, limit=10, tax=None, year_from=None, year_to=None, section=None
             sem_rank[rid] = len(sem_rank)
             best_part[rid] = float(sims[i])
 
-    # Thai has no word spaces, so for a sentence-style question the trigram side
-    # mostly matches noise; it leads only for citation-style queries (มาตรา, กค, numbers).
+    # Exact text is strong evidence when the query is a term or citation ("สิทธิเก็บกิน",
+    # "มาตรา 65 ตรี (13)") or matches only a few rulings — the embedding of a ruling
+    # about renting land need not sit near "สิทธิเก็บกิน". Thai has no word spaces, so
+    # for a long sentence-style question the trigram side mostly matches noise and
+    # only text hits that are also near in meaning count.
+    keyword_like = len(query) <= 30 and len(query.split()) <= 3
     citation_like = bool(re.search(r"\d|มาตรา|กค|ป\.", query)) and len(query) < 40
-    fts_weight = 1.0 if citation_like else 0.35
+    precise = keyword_like or citation_like
+    fts_weight = 1.5 if precise else 0.35
     score = {}
     for rid, r in sem_rank.items():
         score[rid] = 1 / (RRF_K + r)
     for rid, r in fts_rank.items():
-        if not citation_like and sem_rank.get(rid, 10**9) > 150:
+        if not precise and sem_rank.get(rid, 10**9) > 150:
             continue  # text-only hit that is not even close in meaning
         score[rid] = score.get(rid, 0) + fts_weight / (RRF_K + r)
     top = sorted(score, key=score.get, reverse=True)[:limit]

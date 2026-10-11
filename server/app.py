@@ -78,7 +78,9 @@ def resolve(key):
         "a question or facts in Thai or English, a concept, a มาตรา ('มาตรา 65 ตรี (13)') or a เลขที่หนังสือ. "
         "Optional filters: tax_type (e.g. 'ภาษีมูลค่าเพิ่ม', 'ภาษีเงินได้นิติบุคคล', 'อากรแสตมป์'), "
         "year_from / year_to (พ.ศ. or ค.ศ., by ruling date), section (ประมวลรัษฎากร section, e.g. '81' "
-        "or '65 ตรี (13)'). Returns up to `limit` rulings with id, เลขที่หนังสือ, date, subject, ข้อกฎหมาย, "
+        "or '65 ตรี (13)'). A short legal term ('สิทธิเก็บกิน', 'ภาระจำยอม') is matched as exact text "
+        "anywhere in the ruling; a sentence is matched by meaning — so search both the key term alone "
+        "and the facts as a sentence. Returns up to `limit` rulings with id, เลขที่หนังสือ, date, subject, ข้อกฎหมาย, "
         "url and the start of the แนววินิจฉัย; call get_tax_ruling for the full text."
     ),
 )

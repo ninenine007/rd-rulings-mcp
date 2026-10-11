@@ -11,7 +11,8 @@ Tools: `search_tax_rulings`, `get_tax_ruling`, `rulings_by_law`, `related_ruling
 1. **Frame the issue** in one line: tax (VAT, CIT, PIT, WHT, SBT, stamp duty), the transaction, the provision if known.
 2. **Search 2–4 times**, each phrasing different:
    - the facts in plain Thai ("บริษัทให้ที่ดินแก่พนักงานโดยไม่มีค่าตอบแทน")
-   - the legal concept ("รายจ่ายต้องห้าม ค่ารับรอง")
+   - the key legal term **alone**, short ("สิทธิเก็บกิน", "ภาระจำยอม") — matched as exact text,
+     which finds rulings whose subject line never mentions it
    - the provision as a filter (`section="65 ตรี (13)"`) or via `rulings_by_law`
    Add `tax_type` / `year_from` when the question is clearly scoped. Recent law → `year_from` ≈ the last amendment.
 3. **Read before relying**: `get_tax_ruling` on every ruling you will cite. The snippet is not the ruling.

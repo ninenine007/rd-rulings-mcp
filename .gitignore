@@ -1,0 +1,6 @@
+.env
+collector/raw/
+collector/logs/
+rulings.db
+__pycache__/
+.DS_Store

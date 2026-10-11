@@ -1,0 +1,6 @@
+.env
+.git
+collector/raw
+collector/logs
+rulings.db
+**/__pycache__

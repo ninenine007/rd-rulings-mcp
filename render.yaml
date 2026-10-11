@@ -1,0 +1,14 @@
+# Render Blueprint: builds the Dockerfile (which also builds rulings.db from data/).
+services:
+  - type: web
+    name: rd-rulings-mcp
+    runtime: docker
+    plan: free           # sleeps after ~15 min idle (first call then takes ~1 min); 512 MB is enough
+    healthCheckPath: /health
+    envVars:
+      # One token per person: "korn:tok_xxx,somchai:tok_yyy". Dashboard only, never here.
+      - key: RD_TOKENS
+        sync: false
+      # Embeds each query (text-embedding-3-large, 1024 dims — must match data/embeddings.json).
+      - key: OPENAI_API_KEY
+        sync: false

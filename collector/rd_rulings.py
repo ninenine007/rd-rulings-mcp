@@ -122,6 +122,8 @@ def crawl(args):
     if INDEX.exists():
         indexed = {json.loads(l)["id"] for l in INDEX.open(encoding="utf-8")}
     years = year_links(args.delay)
+    if not years:
+        sys.exit("Could not read the year list from rd.go.th — site down or blocking this machine.")
     wanted = args.years or sorted(years, reverse=True)
     with INDEX.open("a", encoding="utf-8") as idx:
         for y in wanted:
@@ -217,9 +219,18 @@ def parse(args):
         for l in INDEX.open(encoding="utf-8"):
             d = json.loads(l)
             meta[d["id"]] = d
+    # raw/ is local only (not in git), so a fresh checkout — e.g. the monthly
+    # GitHub Action — has just the newly fetched pages. Keep every existing record
+    # and replace only the ones whose raw page is here.
+    out_path = DATA / "rulings.jsonl"
+    records = {}
+    if out_path.exists():
+        for l in out_path.open(encoding="utf-8"):
+            d = json.loads(l)
+            records[d["id"]] = d
+    kept = len(records)
     ok = bad = 0
-    with (DATA / "rulings.jsonl").open("w", encoding="utf-8") as out, \
-         (DATA / "parse_errors.jsonl").open("w", encoding="utf-8") as err:
+    with (DATA / "parse_errors.jsonl").open("w", encoding="utf-8") as err:
         for f in sorted(RAW.glob("*.html"), key=lambda p: int(p.stem)):
             rec = parse_ruling(f.read_bytes())
             m = meta.get(f.stem, {"id": f.stem, "url": f"{BASE}/{f.stem}.html"})
@@ -233,11 +244,13 @@ def parse(args):
                 rec["incomplete"] = empty  # blank on the source page itself
             rec["date"] = thai_date_iso(rec.get("date_th"))
             rec["tax_type"] = re.split(r"\s*(?:กรณี|:)", rec["subject"], maxsplit=1)[0].strip()
-            out.write(json.dumps({"id": m["id"], "listed_year": m.get("year"),
-                                  "listed_month": m.get("month"), "url": m["url"], **rec},
-                                 ensure_ascii=False) + "\n")
+            records[m["id"]] = {"id": m["id"], "listed_year": m.get("year"),
+                                "listed_month": m.get("month"), "url": m["url"], **rec}
             ok += 1
-    print(f"parsed {ok}, errors {bad}")
+    with out_path.open("w", encoding="utf-8") as out:
+        for rid in sorted(records, key=int):
+            out.write(json.dumps(records[rid], ensure_ascii=False) + "\n")
+    print(f"parsed {ok} pages, errors {bad}; {len(records)} rulings total (had {kept})")
 
 
 if __name__ == "__main__":

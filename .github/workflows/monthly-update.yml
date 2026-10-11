@@ -1,0 +1,38 @@
+# Monthly top-up: fetch this and last year's new rulings, parse, embed only the new
+# text, commit data/ — the push makes Render rebuild rulings.db and redeploy.
+name: monthly-update
+on:
+  schedule:
+    - cron: "0 1 10 * *"   # 10th of each month, 08:00 Bangkok
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: monthly-update
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests beautifulsoup4 numpy
+      - name: Crawl this and last year (พ.ศ.)
+        run: |
+          Y=$(( $(date +%Y) + 543 ))
+          python collector/rd_rulings.py crawl --years "$Y" "$((Y - 1))"
+      - run: python collector/rd_rulings.py parse
+      - run: python collector/build_db.py --report
+      - name: Embed new text
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python collector/embed.py
+      - name: Commit if anything changed
+        run: |
+          git add data collector/index.jsonl
+          if git diff --cached --quiet; then echo "No new rulings."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Monthly update: $(date +%Y-%m-%d)"
+          git push

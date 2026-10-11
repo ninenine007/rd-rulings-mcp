@@ -26,6 +26,7 @@ from embed import load_env  # noqa: E402
 DB = ROOT / "rulings.db"
 DATA = ROOT / "data"
 RRF_K = 60
+FTS_WEIGHT = 1.5  # text side vs meaning side in the fusion; tuned with eval/run.py
 
 
 @lru_cache(maxsize=1)
@@ -50,9 +51,27 @@ def embed_query(text):
     return v / (np.linalg.norm(v) + 1e-9)
 
 
-def fts_query(text):
-    # trigram FTS needs terms of >= 3 chars; quote each so Thai/punctuation is literal
-    terms = [t for t in re.split(r"\s+", text.replace('"', " ")) if len(t) >= 3]
+@lru_cache(maxsize=1)
+def thai_words():
+    """PyThaiNLP word cutter minus stopwords, or None when it is not installed."""
+    try:
+        from pythainlp.corpus import thai_stopwords
+        from pythainlp.tokenize import word_tokenize
+    except ImportError:
+        return None
+    stop = thai_stopwords()
+    return lambda t: [w for w in word_tokenize(t, engine="newmm", keep_whitespace=False)
+                      if w.strip() and w not in stop]
+
+
+def fts_query(text, split_words=False):
+    """Terms OR'd for the trigram index (each >= 3 chars, quoted so Thai and
+    punctuation are literal). A sentence is cut into Thai words first: Thai has
+    no spaces, so otherwise a whole clause becomes one term that never matches."""
+    text = text.replace('"', " ")
+    cut = thai_words() if split_words else None
+    terms = cut(text) if cut else re.split(r"\s+", text)
+    terms = list(dict.fromkeys(t.strip() for t in terms if len(t.strip()) >= 3))
     return " OR ".join(f'"{t}"' for t in terms)
 
 
@@ -77,8 +96,15 @@ def search(query, limit=10, tax=None, year_from=None, year_to=None, section=None
     allowed = allowed_ids(con, tax, year_from, year_to, section)
     ok = (lambda i: True) if allowed is None else (lambda i: i in allowed)
 
+    # A term or citation ("สิทธิเก็บกิน", "มาตรา 65 ตรี (13)") is matched whole; a
+    # sentence is cut into Thai words first. Exact text matters: the embedding of a
+    # ruling about renting land need not sit near "สิทธิเก็บกิน".
+    keyword_like = len(query) <= 30 and len(query.split()) <= 3
+    citation_like = bool(re.search(r"\d|มาตรา|กค|ป\.", query)) and len(query) < 40
+    precise = keyword_like or citation_like
+
     fts_rank = {}
-    q = fts_query(query)
+    q = fts_query(query, split_words=not precise)
     if q:
         rows = con.execute("SELECT id FROM rulings_fts WHERE rulings_fts MATCH ? "
                            "ORDER BY bm25(rulings_fts, 3, 2, 1, 1) LIMIT 200", (q,))
@@ -94,22 +120,11 @@ def search(query, limit=10, tax=None, year_from=None, year_to=None, section=None
             sem_rank[rid] = len(sem_rank)
             best_part[rid] = float(sims[i])
 
-    # Exact text is strong evidence when the query is a term or citation ("สิทธิเก็บกิน",
-    # "มาตรา 65 ตรี (13)") or matches only a few rulings — the embedding of a ruling
-    # about renting land need not sit near "สิทธิเก็บกิน". Thai has no word spaces, so
-    # for a long sentence-style question the trigram side mostly matches noise and
-    # only text hits that are also near in meaning count.
-    keyword_like = len(query) <= 30 and len(query.split()) <= 3
-    citation_like = bool(re.search(r"\d|มาตรา|กค|ป\.", query)) and len(query) < 40
-    precise = keyword_like or citation_like
-    fts_weight = 1.5 if precise else 0.35
     score = {}
     for rid, r in sem_rank.items():
         score[rid] = 1 / (RRF_K + r)
     for rid, r in fts_rank.items():
-        if not precise and sem_rank.get(rid, 10**9) > 150:
-            continue  # text-only hit that is not even close in meaning
-        score[rid] = score.get(rid, 0) + fts_weight / (RRF_K + r)
+        score[rid] = score.get(rid, 0) + FTS_WEIGHT / (RRF_K + r)
     top = sorted(score, key=score.get, reverse=True)[:limit]
     return [dict(summary(con, rid), score=round(score[rid], 4),
                  matched_by=[n for n, d in (("text", fts_rank), ("meaning", sem_rank)) if rid in d],

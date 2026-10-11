@@ -57,3 +57,15 @@ plus ข้อหารือ / แนววินิจฉัย windows of ~1,
 - `skill/rd-tax-rulings/SKILL.md` — how an AI should research with the tools.
 
 Monthly: `collector/update.sh`, then commit `data/` and push → Render redeploys.
+
+## Search quality (`eval/`)
+
+`python3 eval/run.py` — hit@5 and MRR over `eval/queries.jsonl` (query + expected เลขที่หนังสือ).
+Add real questions there and re-run before and after any search change. Needs PyThaiNLP installed
+(sentence queries are cut into Thai words for the text index): 8/8 with it, 5/8 without.
+
+## Automation
+
+`.github/workflows/monthly-update.yml` runs on the 10th of each month (and on demand): crawl this and
+last year → parse (merges into the existing records; `raw/` is not in git) → embed new text → commit
+`data/` → Render redeploys. Repo secret: `OPENAI_API_KEY`.
